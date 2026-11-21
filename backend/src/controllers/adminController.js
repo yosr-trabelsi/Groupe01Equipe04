@@ -14,6 +14,15 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+const getAllOrders = async (req, res) => {
+  try {
+    const snapshot = await db.collection('orders').get();
+    const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return res.status(200).json(orders);
+  } catch (error) {
+    return res.status(500).json({ error: 'Erreur lors de la récupération des commandes.' });
+  }
+};
 const approveMerchant = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -138,6 +147,7 @@ const updateUserStatus = async (req, res) => {
 
 module.exports = {
   getAllUsers,
+  getAllOrders,
   approveMerchant,
   rejectMerchant,
   updateUserStatus

@@ -1,5 +1,8 @@
 const { db } = require('../config/firebase');
 
+const CATEGORIES = ['boulangerie', 'restaurant', 'cafeteria', 'epicerie', 'patisserie', 'autre'];
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 const getOffers = async (req, res) => {
   try {
     const snapshot = await db.collection('offers')
@@ -52,7 +55,11 @@ const createOffer = async (req, res) => {
       price,
       originalPrice,
       quantity,
-      expirationDate
+      expirationDate,
+      category,
+      imageUrl,
+      pickupStart,
+      pickupEnd
     } = req.body;
 
     if (
@@ -79,6 +86,19 @@ const createOffer = async (req, res) => {
       });
     }
 
+    if (category && !CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: 'Catégorie invalide.' });
+    }
+    if (pickupStart && !TIME_RE.test(pickupStart)) {
+      return res.status(400).json({ error: 'Heure de début invalide.' });
+    }
+    if (pickupEnd && !TIME_RE.test(pickupEnd)) {
+      return res.status(400).json({ error: 'Heure de fin invalide.' });
+    }
+    if (pickupStart && pickupEnd && pickupEnd <= pickupStart) {
+      return res.status(400).json({ error: "L'heure de fin doit être après l'heure de début." });
+    }
+
     const merchantDoc = await db.collection('merchants')
       .doc(req.user.uid)
       .get();
@@ -99,6 +119,10 @@ const createOffer = async (req, res) => {
       originalPrice: Number(originalPrice),
       quantity: Number(quantity),
       expirationDate: expirationDate || null,
+      category: category || 'autre',
+      imageUrl: imageUrl || '',
+      pickupStart: pickupStart || null,
+      pickupEnd: pickupEnd || null,
       isAvailable: true,
       createdAt: new Date().toISOString()
     };
@@ -119,7 +143,10 @@ const createOffer = async (req, res) => {
 
 const updateOffer = async (req, res) => {
   try {
-    const { title, description, price, originalPrice, quantity, expirationDate } = req.body;
+    const {
+      title, description, price, originalPrice, quantity, expirationDate,
+      category, imageUrl, pickupStart, pickupEnd
+    } = req.body;
 
     const offerRef = db.collection('offers').doc(req.params.id);
     const offerDoc = await offerRef.get();
@@ -138,9 +165,42 @@ const updateOffer = async (req, res) => {
 
     const updates = {};
 
-    if (title !== undefined) updates.title = title;
+    if (title !== undefined) {
+      if (!String(title).trim()) {
+        return res.status(400).json({ error: 'Titre invalide.' });
+      }
+      updates.title = String(title).trim();
+    }
     if (description !== undefined) updates.description = description;
-    if (expirationDate !== undefined) updates.expirationDate = expirationDate;
+    if (expirationDate !== undefined) updates.expirationDate = expirationDate || null;
+    if (imageUrl !== undefined) updates.imageUrl = imageUrl || '';
+
+    if (category !== undefined) {
+      if (!CATEGORIES.includes(category)) {
+        return res.status(400).json({ error: 'Catégorie invalide.' });
+      }
+      updates.category = category;
+    }
+
+    if (pickupStart !== undefined) {
+      if (pickupStart && !TIME_RE.test(pickupStart)) {
+        return res.status(400).json({ error: 'Heure de début invalide.' });
+      }
+      updates.pickupStart = pickupStart || null;
+    }
+
+    if (pickupEnd !== undefined) {
+      if (pickupEnd && !TIME_RE.test(pickupEnd)) {
+        return res.status(400).json({ error: 'Heure de fin invalide.' });
+      }
+      updates.pickupEnd = pickupEnd || null;
+    }
+
+    const finalStart = 'pickupStart' in updates ? updates.pickupStart : offerDoc.data().pickupStart;
+    const finalEnd = 'pickupEnd' in updates ? updates.pickupEnd : offerDoc.data().pickupEnd;
+    if (finalStart && finalEnd && finalEnd <= finalStart) {
+      return res.status(400).json({ error: "L'heure de fin doit être après l'heure de début." });
+    }
 
     if (price !== undefined) {
       if (!Number.isFinite(Number(price)) || Number(price) < 0) {
@@ -154,6 +214,12 @@ const updateOffer = async (req, res) => {
         return res.status(400).json({ error: 'Prix original invalide.' });
       }
       updates.originalPrice = Number(originalPrice);
+    }
+
+    const finalPrice = 'price' in updates ? updates.price : offerDoc.data().price;
+    const finalOriginal = 'originalPrice' in updates ? updates.originalPrice : offerDoc.data().originalPrice;
+    if (finalOriginal < finalPrice) {
+      return res.status(400).json({ error: 'Le prix réduit doit être inférieur au prix initial.' });
     }
 
     if (quantity !== undefined) {

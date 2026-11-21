@@ -11,6 +11,11 @@ app.use(express.json());
 app.get('/', (req, res) => res.json({ message: 'CampusSave API OK' }));
 
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/merchants', require('./routes/merchantRoutes'));
+app.use('/api/offers', require('./routes/offerRoutes'));
+app.use('/api/orders', require('./routes/orderRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/qr', require('./routes/qrRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));

@@ -1,5 +1,6 @@
-
 const { db } = require('../config/firebase');
+
+const POINTS_PER_PORTION = 10;
 
 const createOrder = async (req, res) => {
   try {
@@ -113,7 +114,7 @@ const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
-    const allowedStatuses = ['confirmed', 'ready', 'cancelled'];
+    const allowedStatuses = ['confirmed', 'ready', 'completed', 'cancelled'];
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({
@@ -139,7 +140,7 @@ const updateOrderStatus = async (req, res) => {
       const transitions = {
         pending: ['confirmed', 'cancelled'],
         confirmed: ['ready', 'cancelled'],
-        ready: [],
+        ready: ['completed'],
         completed: [],
         cancelled: []
       };
@@ -148,25 +149,43 @@ const updateOrderStatus = async (req, res) => {
         throw new Error('Changement de statut non autorisé.');
       }
 
+      // Toutes les lectures AVANT les écritures (règle Firestore)
+      let offerDoc = null;
+      let studentDoc = null;
+      const offerRef = db.collection('offers').doc(order.offerId);
+      const studentRef = db.collection('users').doc(order.studentId);
+
       if (status === 'cancelled') {
-        const offerRef = db.collection('offers').doc(order.offerId);
-        const offerDoc = await transaction.get(offerRef);
-
-        if (offerDoc.exists) {
-          const offer = offerDoc.data();
-          const restoredQuantity = offer.quantity + order.quantity;
-
-          transaction.update(offerRef, {
-            quantity: restoredQuantity,
-            isAvailable: true
-          });
-        }
+        offerDoc = await transaction.get(offerRef);
+      }
+      if (status === 'completed') {
+        studentDoc = await transaction.get(studentRef);
       }
 
-      transaction.update(orderRef, {
+      if (status === 'cancelled' && offerDoc && offerDoc.exists) {
+        const offer = offerDoc.data();
+        transaction.update(offerRef, {
+          quantity: offer.quantity + order.quantity,
+          isAvailable: true
+        });
+      }
+
+      const orderUpdate = {
         status,
         updatedAt: new Date().toISOString()
-      });
+      };
+
+      if (status === 'completed') {
+        const points = Number(order.quantity) * POINTS_PER_PORTION;
+        if (studentDoc && studentDoc.exists) {
+          transaction.update(studentRef, {
+            ecoPoints: (studentDoc.data().ecoPoints || 0) + points
+          });
+        }
+        orderUpdate.ecoPointsEarned = points;
+      }
+
+      transaction.update(orderRef, orderUpdate);
     });
 
     return res.status(200).json({
