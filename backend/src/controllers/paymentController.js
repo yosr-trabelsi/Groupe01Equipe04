@@ -1,8 +1,6 @@
 const { db } = require('../config/firebase');
 const paymentService = require('../services/paymentService');
 const notificationService = require('../services/notificationService');
-
-// À ADAPTER avec Personne 5 : statuts de commande utilisés dans Firestore
 const PENDING_ORDER_STATUSES = new Set(['pending', 'pending_payment']);
 const PAID_ORDER_STATUS = 'confirmed';
 
@@ -10,16 +8,11 @@ const httpError = (status, message) => Object.assign(new Error(message), { statu
 
 const handle = (res, next, err) =>
   err.status ? res.status(err.status).json({ message: err.message }) : next(err);
-
-// Montant de la commande en TND -> millimes (1 TND = 1000 millimes)
-// À ADAPTER : nom du champ du total dans orders (totalPrice / total / amount)
 function toMillimes(order) {
   const total = order.totalPrice ?? order.total ?? order.amount;
   if (typeof total !== 'number' || !(total > 0)) throw httpError(422, 'Montant de la commande invalide');
   return Math.round(total * 1000);
 }
-
-// Vérifie auprès de Konnect puis marque la commande comme payée (idempotent)
 async function confirmPayment(paymentRef) {
   const found = await db.collection('orders').where('paymentRef', '==', paymentRef).limit(1).get();
   if (found.empty) return { found: false };
@@ -49,11 +42,19 @@ async function confirmPayment(paymentRef) {
         data: { orderId: orderRef.id },
       })
       .catch((e) => console.error('Notification échouée :', e.message));
+    if (order.merchantId) {
+      notificationService
+        .sendToUser({
+          uid: order.merchantId,
+          title: 'Nouvelle commande payée',
+          body: `${order.offerTitle || 'Une offre'} × ${order.quantity || 1} : à préparer pour le retrait.`,
+          data: { orderId: orderRef.id },
+        })
+        .catch((e) => console.error('Notification commerçant échouée :', e.message));
+    }
   }
   return { found: true, completed: true, already };
 }
-
-// POST /api/payments/init  { orderId }  (étudiant) -> { payUrl, paymentRef }
 exports.initPayment = async (req, res, next) => {
   try {
     const { PUBLIC_API_URL, WEB_URL } = process.env;
@@ -86,9 +87,6 @@ exports.initPayment = async (req, res, next) => {
     res.json({ payUrl, paymentRef });
   } catch (err) { handle(res, next, err); }
 };
-
-// GET /api/payments/webhook?payment_ref=...  (PUBLIC : appelé par Konnect)
-// On ne fait jamais confiance au paramètre : on revérifie le statut chez Konnect.
 exports.webhook = async (req, res, next) => {
   try {
     const ref = req.query.payment_ref;
@@ -100,8 +98,6 @@ exports.webhook = async (req, res, next) => {
     res.json({ received: true, completed: result.completed });
   } catch (err) { handle(res, next, err); }
 };
-
-// GET /api/payments/:orderId/status  (étudiant) : statut + synchro avec Konnect
 exports.getPaymentStatus = async (req, res, next) => {
   try {
     const orderRef = db.collection('orders').doc(req.params.orderId);
@@ -110,8 +106,6 @@ exports.getPaymentStatus = async (req, res, next) => {
 
     let order = snap.data();
     if (order.studentId !== req.user.uid) throw httpError(403, 'Accès refusé');
-
-    // Si le webhook n'est pas encore passé, on vérifie nous-mêmes
     if (order.paymentStatus === 'pending' && order.paymentRef) {
       try {
         await confirmPayment(order.paymentRef);
