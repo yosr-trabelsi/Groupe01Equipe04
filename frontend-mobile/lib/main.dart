@@ -5,7 +5,9 @@ import 'firebase_options.dart'; // généré par : flutterfire configure
 import 'providers/auth_provider.dart';
 import 'providers/offers_provider.dart';
 import 'providers/orders_provider.dart';
+import 'screens/admin/admin_dashboard.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/merchant/merchant_dashboard.dart';
 import 'screens/student/home_screen.dart';
 import 'utils/constants.dart';
 import 'utils/theme.dart';
@@ -56,7 +58,8 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    switch (context.watch<AuthProvider>().status) {
+    final auth = context.watch<AuthProvider>();
+    switch (auth.status) {
       case AuthStatus.loading:
         return const Scaffold(
           body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
@@ -64,6 +67,8 @@ class AuthGate extends StatelessWidget {
       case AuthStatus.signedOut:
         return const LoginScreen();
       case AuthStatus.signedIn:
+        if (auth.user?.isMerchant == true) return const MerchantDashboard();
+        if (auth.user?.role == 'admin') return const AdminDashboard();
         return const HomeScreen();
     }
   }

@@ -8,13 +8,11 @@ class ApiException implements Exception {
   final int status;
   final String message;
   ApiException(this.status, this.message);
+
   @override
   String toString() => message;
 }
 
-/// Client HTTP unique (équivalent de frontend-web/src/services/api.js) :
-///  - ajoute le Firebase ID Token à chaque requête (Authorization: Bearer ...)
-///  - lit les erreurs aux formats du backend : {error}, {message}, {message, errors:[...]}
 class ApiService {
   static const _timeout = Duration(seconds: 20);
 
@@ -64,6 +62,9 @@ class ApiService {
         case 'PUT':
           r = await http.put(uri, headers: headers, body: jsonEncode(body ?? {})).timeout(_timeout);
           break;
+        case 'DELETE':
+          r = await http.delete(uri, headers: headers).timeout(_timeout);
+          break;
         default:
           throw ArgumentError('Méthode non supportée : $method');
       }
@@ -86,7 +87,11 @@ class ApiService {
   }
 
   static Future<dynamic> get(String path, {bool auth = true}) => request('GET', path, auth: auth);
+
   static Future<dynamic> post(String path, Map<String, dynamic> body, {bool auth = true}) =>
       request('POST', path, body: body, auth: auth);
+
   static Future<dynamic> put(String path, Map<String, dynamic> body) => request('PUT', path, body: body);
+
+  static Future<dynamic> delete(String path) => request('DELETE', path);
 }

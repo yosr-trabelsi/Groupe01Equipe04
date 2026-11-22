@@ -11,7 +11,7 @@ enum AuthStatus { loading, signedOut, signedIn }
 class AuthProvider extends ChangeNotifier {
   AuthStatus status = AuthStatus.loading;
   AppUser? user;
-  String? notice; // message affiché sur l'écran de connexion
+  String? notice; 
   StreamSubscription<User?>? _sub;
 
   AuthProvider() {
@@ -29,9 +29,8 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final profile = await AuthService.fetchProfile();
-      if (!profile.isStudent) {
-        notice = 'Cette application est réservée aux étudiants. '
-            'Commerçants et administrateurs : utilisez l’application web.';
+      if (!profile.isStudent && !profile.isMerchant && profile.role != 'admin') {
+        notice = 'Ce type de compte n’est pas pris en charge sur mobile.';
         await AuthService.signOut();
         return;
       }
@@ -75,7 +74,6 @@ class AuthProvider extends ChangeNotifier {
   Future<String?> updateProfile({required String name, required String phone}) async {
     try {
       final updated = await AuthService.updateProfile(name: name, phone: phone);
-      // /auth/me ne renvoie pas toujours tous les champs : on fusionne avec le profil courant
       user = user?.copyWith(name: updated.name, phone: updated.phone) ?? updated;
       notifyListeners();
       return null;

@@ -1,6 +1,4 @@
 import '../utils/parsers.dart';
-
-/// Document Firestore "users" (authController.register) : uid, email, name, role, status, phone, createdAt.
 class AppUser {
   final String uid, email, name, role;
   final String? phone, status;
@@ -17,6 +15,7 @@ class AppUser {
   });
 
   bool get isStudent => role == 'student';
+  bool get isMerchant => role == 'merchant';
 
   factory AppUser.fromJson(Map<String, dynamic> j) => AppUser(
         uid: str(j['uid'] ?? j['id']),
