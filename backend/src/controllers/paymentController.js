@@ -1,6 +1,9 @@
 const { db } = require('../config/firebase');
 const paymentService = require('../services/paymentService');
 const notificationService = require('../services/notificationService');
+const emailService = require('../services/emailService');
+const qrTokenService = require('../services/qrTokenService');
+
 const PENDING_ORDER_STATUSES = new Set(['pending', 'pending_payment']);
 const PAID_ORDER_STATUS = 'confirmed';
 
@@ -8,11 +11,34 @@ const httpError = (status, message) => Object.assign(new Error(message), { statu
 
 const handle = (res, next, err) =>
   err.status ? res.status(err.status).json({ message: err.message }) : next(err);
+
 function toMillimes(order) {
   const total = order.totalPrice ?? order.total ?? order.amount;
   if (typeof total !== 'number' || !(total > 0)) throw httpError(422, 'Montant de la commande invalide');
   return Math.round(total * 1000);
 }
+
+async function sendReceipt(orderId, order) {
+  const userSnap = await db.collection('users').doc(order.studentId).get();
+  const user = userSnap.data() || {};
+  if (!user.email) return;
+  let qrImage = null;
+  try {
+    qrImage = (await qrTokenService.generateOrderQr(orderId)).qrImage;
+  } catch (e) {
+    console.error('QR pour le reçu impossible :', e.message);
+  }
+  await emailService.sendPaymentReceipt({
+    to: user.email,
+    name: user.name,
+    orderId,
+    offerTitle: order.offerTitle,
+    quantity: order.quantity,
+    totalPrice: order.totalPrice,
+    qrImage,
+  });
+}
+
 async function confirmPayment(paymentRef) {
   const found = await db.collection('orders').where('paymentRef', '==', paymentRef).limit(1).get();
   if (found.empty) return { found: false };
@@ -42,6 +68,7 @@ async function confirmPayment(paymentRef) {
         data: { orderId: orderRef.id },
       })
       .catch((e) => console.error('Notification échouée :', e.message));
+
     if (order.merchantId) {
       notificationService
         .sendToUser({
@@ -52,9 +79,12 @@ async function confirmPayment(paymentRef) {
         })
         .catch((e) => console.error('Notification commerçant échouée :', e.message));
     }
+
+    sendReceipt(orderRef.id, order).catch((e) => console.error('Email de reçu échoué :', e.message));
   }
   return { found: true, completed: true, already };
 }
+
 exports.initPayment = async (req, res, next) => {
   try {
     const { PUBLIC_API_URL, WEB_URL } = process.env;
@@ -87,6 +117,7 @@ exports.initPayment = async (req, res, next) => {
     res.json({ payUrl, paymentRef });
   } catch (err) { handle(res, next, err); }
 };
+
 exports.webhook = async (req, res, next) => {
   try {
     const ref = req.query.payment_ref;
@@ -98,6 +129,7 @@ exports.webhook = async (req, res, next) => {
     res.json({ received: true, completed: result.completed });
   } catch (err) { handle(res, next, err); }
 };
+
 exports.getPaymentStatus = async (req, res, next) => {
   try {
     const orderRef = db.collection('orders').doc(req.params.orderId);
@@ -106,6 +138,7 @@ exports.getPaymentStatus = async (req, res, next) => {
 
     let order = snap.data();
     if (order.studentId !== req.user.uid) throw httpError(403, 'Accès refusé');
+
     if (order.paymentStatus === 'pending' && order.paymentRef) {
       try {
         await confirmPayment(order.paymentRef);
