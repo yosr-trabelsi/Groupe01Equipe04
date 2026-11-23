@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'merchant_stats_screen.dart';
 import 'my_offers_screen.dart';
 import 'orders_screen.dart';
 import 'qr_scanner_screen.dart';
@@ -20,6 +21,7 @@ class _MerchantDashboardState extends State<MerchantDashboard> {
       const MyOffersScreen(),
       const OrdersScreen(),
       const QrScannerScreen(),
+      const MerchantStatsScreen(),
     ];
     return Scaffold(
       body: pages[_index],
@@ -41,6 +43,11 @@ class _MerchantDashboardState extends State<MerchantDashboard> {
           NavigationDestination(
             icon: Icon(Icons.qr_code_scanner),
             label: 'Scanner',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Stats',
           ),
         ],
       ),

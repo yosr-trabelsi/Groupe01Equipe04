@@ -5,6 +5,16 @@ import '../../services/api_service.dart';
 import '../../services/merchant_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/merchant_helpers.dart';
+
+const _categories = <String, String>{
+  'boulangerie': 'Boulangerie',
+  'restaurant': 'Restaurant',
+  'cafeteria': 'Cafétéria',
+  'epicerie': 'Épicerie',
+  'patisserie': 'Pâtisserie',
+  'autre': 'Autre',
+};
+
 class AddOfferScreen extends StatefulWidget {
   final Offer? offer;
   const AddOfferScreen({super.key, this.offer});
@@ -20,7 +30,11 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   late final TextEditingController _originalPrice;
   late final TextEditingController _price;
   late final TextEditingController _quantity;
+  late final TextEditingController _imageUrl;
   DateTime? _expiration;
+  TimeOfDay? _pickupStart;
+  TimeOfDay? _pickupEnd;
+  String _category = 'autre';
   bool _saving = false;
 
   bool get _isEdit => widget.offer != null;
@@ -34,7 +48,11 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     _originalPrice = TextEditingController(text: o == null ? '' : _num(o.originalPrice));
     _price = TextEditingController(text: o == null ? '' : _num(o.price));
     _quantity = TextEditingController(text: o == null ? '' : o.quantity.toString());
+    _imageUrl = TextEditingController(text: o?.imageUrl ?? '');
     _expiration = o?.expirationDate;
+    _pickupStart = _parseTime(o?.pickupStart);
+    _pickupEnd = _parseTime(o?.pickupEnd);
+    if (o != null && _categories.containsKey(o.category)) _category = o.category;
   }
 
   @override
@@ -44,6 +62,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     _originalPrice.dispose();
     _price.dispose();
     _quantity.dispose();
+    _imageUrl.dispose();
     super.dispose();
   }
 
@@ -54,6 +73,21 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   }
 
   double _parse(String v) => double.tryParse(v.trim().replaceAll(',', '.')) ?? 0;
+
+  TimeOfDay? _parseTime(String? s) {
+    if (s == null) return null;
+    final parts = s.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return TimeOfDay(hour: h, minute: m);
+  }
+
+  String _fmt(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  int _minutes(TimeOfDay t) => t.hour * 60 + t.minute;
 
   void _snack(String m) {
     if (!mounted) return;
@@ -72,6 +106,21 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
       lastDate: today.add(const Duration(days: 365)),
     );
     if (d != null && mounted) setState(() => _expiration = d);
+  }
+
+  Future<void> _pickTime(bool start) async {
+    final init = (start ? _pickupStart : _pickupEnd) ??
+        (start ? const TimeOfDay(hour: 12, minute: 0) : const TimeOfDay(hour: 14, minute: 0));
+    final t = await showTimePicker(context: context, initialTime: init);
+    if (t != null && mounted) {
+      setState(() {
+        if (start) {
+          _pickupStart = t;
+        } else {
+          _pickupEnd = t;
+        }
+      });
+    }
   }
 
   String? _vTitle(String? v) {
@@ -94,11 +143,29 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     return (q == null || q < 1) ? 'Quantité minimale : 1' : null;
   }
 
+  String? _vImage(String? v) {
+    final t = v?.trim() ?? '';
+    if (t.isEmpty) return null;
+    final uri = Uri.tryParse(t);
+    final ok = uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+    return ok ? null : 'Lien invalide (doit commencer par http ou https)';
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final exp = _expiration;
     if (exp == null) {
       _snack("Choisissez la date d'expiration");
+      return;
+    }
+    final ps = _pickupStart;
+    final pe = _pickupEnd;
+    if (ps == null || pe == null) {
+      _snack('Choisissez les horaires de récupération');
+      return;
+    }
+    if (_minutes(pe) <= _minutes(ps)) {
+      _snack("L'heure de fin doit être après l'heure de début");
       return;
     }
     final d = exp;
@@ -112,6 +179,10 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
       'originalPrice': _parse(_originalPrice.text),
       'quantity': int.parse(_quantity.text.trim()),
       'expirationDate': dateStr,
+      'category': _category,
+      'pickupStart': _fmt(ps),
+      'pickupEnd': _fmt(pe),
+      'imageUrl': _imageUrl.text.trim(),
     };
 
     setState(() => _saving = true);
@@ -132,6 +203,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final imageUrl = _imageUrl.text.trim();
+    final showPreview = _vImage(imageUrl) == null && imageUrl.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(title: Text(_isEdit ? "Modifier l'offre" : 'Nouvelle offre')),
       body: AbsorbPointer(
@@ -157,6 +231,19 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   labelText: 'Description (facultatif)',
                   border: OutlineInputBorder(),
                 ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: const InputDecoration(
+                  labelText: 'Catégorie',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final e in _categories.entries)
+                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: (v) => setState(() => _category = v ?? 'autre'),
               ),
               const SizedBox(height: 12),
               Row(
@@ -205,6 +292,58 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                     ? "Date d'expiration"
                     : "Expire le ${dateLabel(_expiration!)}"),
               ),
+              const SizedBox(height: 12),
+              const Text(
+                'Horaires de récupération',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _pickTime(true),
+                      icon: const Icon(Icons.schedule),
+                      label: Text(_pickupStart == null ? 'Début' : _fmt(_pickupStart!)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _pickTime(false),
+                      icon: const Icon(Icons.schedule),
+                      label: Text(_pickupEnd == null ? 'Fin' : _fmt(_pickupEnd!)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _imageUrl,
+                keyboardType: TextInputType.url,
+                decoration: const InputDecoration(
+                  labelText: 'Lien de la photo (facultatif)',
+                  hintText: 'https://...',
+                  border: OutlineInputBorder(),
+                ),
+                validator: _vImage,
+                onChanged: (_) => setState(() {}),
+              ),
+              if (showPreview) ...[
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    imageUrl,
+                    height: 150,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) => const SizedBox(
+                      height: 60,
+                      child: Center(child: Text("Impossible d'afficher cette image")),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _saving ? null : _submit,

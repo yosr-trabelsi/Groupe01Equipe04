@@ -7,6 +7,7 @@ import '../../utils/constants.dart';
 import '../../utils/merchant_helpers.dart';
 import '../../widgets/app_widgets.dart';
 import '../../widgets/logout_button.dart';
+import 'admin_stats_screen.dart';
 import 'manage_users_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -22,6 +23,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
+      const AdminStatsScreen(),
       const _RequestsTab(),
       const ManageUsersScreen(),
       const _AllOrdersTab(),
@@ -33,6 +35,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         onDestinationSelected: (i) => setState(() => _index = i),
         height: 68,
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Stats',
+          ),
           NavigationDestination(
             icon: Icon(Icons.storefront_outlined),
             selectedIcon: Icon(Icons.storefront),
