@@ -5,10 +5,6 @@ const { getFirestore } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { getMessaging } = require('firebase-admin/messaging');
 
-const projectId = process.env.FIREBASE_PROJECT_ID;
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
 const firebaseConfigured = process.env.FIREBASE_ENABLED === 'true';
 
 let app = null;
@@ -17,14 +13,12 @@ let auth = null;
 let messaging = null;
 
 if (firebaseConfigured) {
+  const serviceAccount = require('../../serviceAccountKey.json');
+
   app = getApps().length
     ? getApps()[0]
     : initializeApp({
-        credential: cert({
-          projectId,
-          clientEmail,
-          privateKey: privateKey.replace(/\\n/g, '\n'),
-        }),
+        credential: cert(serviceAccount),
       });
 
   db = getFirestore(app);

@@ -1,3 +1,4 @@
+
 const express = require('express');
 
 const {
@@ -5,7 +6,10 @@ const {
   getAllOrders,
   approveMerchant,
   rejectMerchant,
-  updateUserStatus
+  updateUserStatus,
+  getPendingOffers,
+  approveOffer,
+  rejectOffer
 } = require('../controllers/adminController');
 
 const verifyToken = require('../middleware/authMiddleware');
@@ -20,5 +24,9 @@ router.get('/orders', getAllOrders);
 router.put('/users/:uid/status', updateUserStatus);
 router.put('/merchants/:uid/approve', approveMerchant);
 router.put('/merchants/:uid/reject', rejectMerchant);
+
+router.get('/offers', getPendingOffers);
+router.put('/offers/:id/approve', approveOffer);
+router.put('/offers/:id/reject', rejectOffer);
 
 module.exports = router;

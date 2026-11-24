@@ -117,8 +117,57 @@ const updateMerchantProfile = async (req, res) => {
   }
 };
 
+
+const getApprovedMerchantsForRadar = async (req, res) => {
+  try {
+    const snapshot = await db.collection('merchants')
+      .where('approvalStatus', '==', 'approved')
+      .get();
+
+    const merchants = snapshot.docs
+      .map((doc) => {
+        const data = doc.data();
+        const location = data.location;
+
+        if (
+          !location ||
+          typeof location.latitude !== 'number' ||
+          typeof location.longitude !== 'number'
+        ) {
+          return null;
+        }
+
+        return {
+          uid: data.uid || doc.id,
+          businessName: data.businessName || '',
+          address: data.address || '',
+          category: data.category || null,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          ...(data.demoSeed !== undefined && {
+            demoSeed: data.demoSeed,
+          }),
+        };
+      })
+      .filter(Boolean);
+
+    return res.status(200).json({
+      count: merchants.length,
+      merchants,
+    });
+
+  } catch (error) {
+    console.error('Erreur Campus Radar:', error);
+
+    return res.status(500).json({
+      error: 'Erreur lors de la récupération des commerces.'
+    });
+  }
+};
+
 module.exports = {
   applyForMerchant,
   getMerchantProfile,
-  updateMerchantProfile
+  updateMerchantProfile,
+  getApprovedMerchantsForRadar
 };

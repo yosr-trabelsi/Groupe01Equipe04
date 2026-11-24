@@ -1,5 +1,6 @@
+
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Tag, Search, ClipboardList, LayoutDashboard, User } from 'lucide-react'
+import { Tag, Search, ClipboardList, LayoutDashboard, User, MapPin } from 'lucide-react'
 import AdminLayout from './components/AdminLayout'
 import UserLayout from './components/UserLayout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -12,6 +13,7 @@ import ManageOrders from './pages/admin/ManageOrders'
 import Offers from './pages/student/Offers'
 import MyOrders from './pages/student/MyOrders'
 import StudentDashboard from './pages/student/StudentDashboard'
+import CampusRadar from './pages/student/CampusRadar'
 import MyOffers from './pages/merchant/MyOffers'
 import MerchantOrders from './pages/merchant/MerchantOrders'
 import MerchantDashboard from './pages/merchant/MerchantDashboard'
@@ -19,10 +21,12 @@ import Profile from './pages/Profile'
 
 const studentLinks = [
   { to: '/student', label: 'Offres', icon: Search, end: true },
+  { to: '/student/radar', label: 'Campus Radar', icon: MapPin },
   { to: '/student/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
   { to: '/student/orders', label: 'Mes commandes', icon: ClipboardList },
   { to: '/student/profile', label: 'Mon profil', icon: User },
 ]
+
 const merchantLinks = [
   { to: '/merchant', label: 'Mes offres', icon: Tag, end: true },
   { to: '/merchant/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
@@ -48,6 +52,7 @@ export default function App() {
       <Route path="/student" element={<ProtectedRoute role="student"><UserLayout links={studentLinks} /></ProtectedRoute>}>
         <Route index element={<Offers />} />
         <Route path="dashboard" element={<StudentDashboard />} />
+        <Route path="radar" element={<CampusRadar />} />
         <Route path="orders" element={<MyOrders />} />
         <Route path="profile" element={<Profile />} />
       </Route>
