@@ -9,7 +9,6 @@ import '../../utils/format.dart';
 import '../../widgets/app_widgets.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/offer_card.dart';
-import 'payment_screen.dart';
 
 class OfferDetailsScreen extends StatefulWidget {
   final Offer offer;
@@ -34,13 +33,21 @@ class _OfferDetailsScreenState extends State<OfferDetailsScreen> {
     try {
       final orders = context.read<OrdersProvider>();
       final offers = context.read<OffersProvider>();
-      // POST /api/orders : réservation (stock décrémenté côté serveur dans une transaction)
-      final orderId = await orders.create(o.id, _qty);
+      // POST /api/orders : réservation (stock décrémenté côté serveur dans une transaction).
+      // Le commerçant est notifié ; le paiement se fait après son acceptation.
+      await orders.create(o.id, _qty);
       offers.load(); // met à jour le stock affiché
       if (!mounted) return;
-      // Puis paiement Konnect
-      Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (_) => PaymentScreen(orderId: orderId, title: o.title, autoStart: true)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Réservation envoyée. Le commerçant doit l'accepter : tu seras notifié, "
+            'puis tu pourras payer dans « Mes commandes ».',
+          ),
+          duration: Duration(seconds: 5),
+        ),
+      );
+      Navigator.pop(context);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -112,6 +119,11 @@ class _OfferDetailsScreenState extends State<OfferDetailsScreen> {
                     const SizedBox(height: 6),
                     Text('Total : ${formatPrice(o.price * _qty)}',
                         style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    const Text(
+                      "Tu paieras après l'acceptation de ta réservation par le commerçant.",
+                      style: TextStyle(color: AppColors.muted, fontSize: 12),
+                    ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       AppBadge(_error!, kind: BadgeKind.red),
@@ -127,7 +139,7 @@ class _OfferDetailsScreenState extends State<OfferDetailsScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: PrimaryButton(
-            label: 'Réserver et payer · ${formatPrice(o.price * _qty)}',
+            label: 'Réserver · ${formatPrice(o.price * _qty)}',
             icon: Icons.shopping_bag_outlined,
             loading: _busy,
             onPressed: o.isBookable ? _reserve : null,

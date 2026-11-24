@@ -11,7 +11,6 @@ import 'home_screen.dart';
 import 'order_qr_screen.dart';
 import 'payment_screen.dart';
 
-/// Pastille de statut : mêmes couleurs que le web (MyOrders.jsx).
 BadgeKind statusKind(Order o) {
   if (o.isCancelled) return BadgeKind.red;
   if (o.isCollected || o.status == OrderStatus.ready || o.status == OrderStatus.confirmed) return BadgeKind.green;
@@ -76,6 +75,10 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = order;
+    // Flux : réservation -> acceptation du commerçant -> paiement.
+    final waitingMerchant = o.status == 'pending' && !o.isFinal && !o.isPaid;
+    final canPay = o.needsPayment && o.status == 'confirmed';
+    final showPayBadge = !o.isFinal && (o.isPaid || o.status != 'pending');
     return AppCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -96,7 +99,7 @@ class _OrderCard extends StatelessWidget {
           const SizedBox(width: 16),
           Text(formatPrice(o.totalPrice), style: const TextStyle(fontWeight: FontWeight.w800)),
           const Spacer(),
-          if (!o.isFinal)
+          if (showPayBadge)
             AppBadge(o.isPaid ? 'Payée' : (o.paymentStatus == 'pending' ? 'Paiement en cours' : 'À payer'),
                 kind: o.isPaid ? BadgeKind.green : BadgeKind.accent),
         ]),
@@ -105,8 +108,16 @@ class _OrderCard extends StatelessWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Text(formatDateTime(o.createdAt!), style: const TextStyle(color: AppColors.muted, fontSize: 12)),
           ),
-        if (o.needsPayment || o.hasQr) const SizedBox(height: 14),
-        if (o.needsPayment)
+        if (waitingMerchant)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text(
+              'En attente de la réponse du commerçant. Tu seras notifié.',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+          ),
+        if (canPay || o.hasQr) const SizedBox(height: 14),
+        if (canPay)
           PrimaryButton(
             label: 'Payer',
             icon: Icons.credit_card,
