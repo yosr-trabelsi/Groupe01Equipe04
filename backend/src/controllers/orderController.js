@@ -1,6 +1,14 @@
 const { db } = require('../config/firebase');
+const notificationService = require('../services/notificationService');
 
 const POINTS_PER_PORTION = 10;
+
+const notify = (uid, title, body, orderId) => {
+  if (!uid) return;
+  Promise.resolve(
+    notificationService.sendToUser({ uid, title, body, data: { orderId } })
+  ).catch((e) => console.error('Notification échouée :', e.message));
+};
 
 const createOrder = async (req, res) => {
   try {
@@ -18,6 +26,7 @@ const createOrder = async (req, res) => {
 
     const offerRef = db.collection('offers').doc(offerId);
     const orderRef = db.collection('orders').doc();
+    let created = null;
 
     await db.runTransaction(async transaction => {
       const offerDoc = await transaction.get(offerRef);
@@ -56,7 +65,22 @@ const createOrder = async (req, res) => {
         status: 'pending',
         createdAt: new Date().toISOString()
       });
+
+      created = {
+        merchantId: offer.merchantId,
+        title: offer.title,
+        quantity: requestedQuantity
+      };
     });
+
+    if (created) {
+      notify(
+        created.merchantId,
+        'Nouvelle commande',
+        `${created.title} × ${created.quantity} : à accepter ou à refuser.`,
+        orderRef.id
+      );
+    }
 
     return res.status(201).json({
       message: 'Réservation créée avec succès.',
@@ -123,6 +147,7 @@ const updateOrderStatus = async (req, res) => {
     }
 
     const orderRef = db.collection('orders').doc(req.params.id);
+    let before = null;
 
     await db.runTransaction(async transaction => {
       const orderDoc = await transaction.get(orderRef);
@@ -148,8 +173,6 @@ const updateOrderStatus = async (req, res) => {
       if (!transitions[order.status]?.includes(status)) {
         throw new Error('Changement de statut non autorisé.');
       }
-
-      // Toutes les lectures AVANT les écritures (règle Firestore)
       let offerDoc = null;
       let studentDoc = null;
       const offerRef = db.collection('offers').doc(order.offerId);
@@ -186,7 +209,41 @@ const updateOrderStatus = async (req, res) => {
       }
 
       transaction.update(orderRef, orderUpdate);
+      before = order;
     });
+
+    if (before) {
+      const title = before.offerTitle || 'ta commande';
+      if (status === 'confirmed') {
+        notify(
+          before.studentId,
+          'Commande acceptée',
+          `Le commerçant a accepté ta commande (${title}). Tu peux maintenant la payer.`,
+          orderRef.id
+        );
+      } else if (status === 'cancelled') {
+        const refused = before.status === 'pending';
+        let body = refused
+          ? `Le commerçant a refusé ta commande (${title}).`
+          : `Le commerçant a annulé ta commande (${title}).`;
+        if (before.paymentStatus === 'paid') {
+          body += ' Contacte le commerçant pour le remboursement.';
+        }
+        notify(
+          before.studentId,
+          refused ? 'Commande refusée' : 'Commande annulée',
+          body,
+          orderRef.id
+        );
+      } else if (status === 'ready') {
+        notify(
+          before.studentId,
+          'Commande prête',
+          `Ta commande (${title}) est prête. Viens la récupérer avec ton QR code.`,
+          orderRef.id
+        );
+      }
+    }
 
     return res.status(200).json({
       message: 'Statut de la commande modifié.'
